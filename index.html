@@ -593,6 +593,11 @@
       startHM: initial.startHM || null,
       endHM: initial.endHM || null,
       running: !!initial.running,
+      // wakePref: 'auto' | 'off' | 'on'
+      //   'auto' = 初期状態. running 時のみ自動取得
+      //   'off'  = ユーザーが SLEEP:OFF を明示. 常に取得しようとする (visible 時)
+      //   'on'   = ユーザーが SLEEP:ON を明示. 取得しない
+      wakePref: initial.wakePref === 'off' || initial.wakePref === 'on' ? initial.wakePref : 'auto',
     };
     let presets = readJSON({ key: PRESETS_KEY, value: [] });
 
@@ -600,6 +605,7 @@
       startHM: state.startHM,
       endHM: state.endHM,
       running: state.running,
+      wakePref: state.wakePref,
     }));
     const savePresets = () => localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
     const hasSession = () => !!(state.startHM && state.endHM);
@@ -763,42 +769,58 @@
 
   const wake = (() => {
     let wakeLock = null;
-    let userDisabled = false;
     const setWakeUI = on => {
       dom.wake.textContent = `SLEEP: ${on ? 'OFF' : 'ON'}`;
       dom.wake.classList.toggle('on', on);
     };
+    // 意図的に wake lock を維持すべきか (running 中 or ユーザーが明示的に off 選択)
+    const shouldHoldLock = () => {
+      const { wakePref, running } = stateStore.state;
+      if (wakePref === 'on') return false;      // ユーザーが SLEEP:ON を明示
+      if (wakePref === 'off') return true;       // ユーザーが SLEEP:OFF を明示
+      return running;                            // 'auto': running 中のみ
+    };
     const ensureWakeLock = async () => {
-      if (!('wakeLock' in navigator) || wakeLock || userDisabled) return;
+      if (!('wakeLock' in navigator) || wakeLock) return;
+      if (!shouldHoldLock()) return;
       try {
         wakeLock = await navigator.wakeLock.request('screen');
         setWakeUI(true);
         wakeLock.addEventListener('release', () => {
           wakeLock = null;
           setWakeUI(false);
+          // ページが visible に戻った時に再取得を試みる (visibilitychange 側で拾う).
+          // OS がタブ切り替え等で強制 release した場合を想定.
         });
       } catch {
         // Wake Lock can fail on insecure origins or without a user gesture.
       }
     };
+    const releaseWakeLock = async () => {
+      if (!wakeLock) return;
+      try { await wakeLock.release(); } catch {}
+      wakeLock = null;
+      setWakeUI(false);
+    };
     const bind = () => {
       dom.wake.addEventListener('click', async () => {
         if (wakeLock) {
-          userDisabled = true;
-          try { await wakeLock.release(); } catch {}
-          wakeLock = null;
-          setWakeUI(false);
-          return;
+          // 現在保持中 → ユーザーが SLEEP:ON にしたい
+          stateStore.state.wakePref = 'on';
+          stateStore.save();
+          await releaseWakeLock();
+        } else {
+          // 未保持 → ユーザーが SLEEP:OFF にしたい
+          stateStore.state.wakePref = 'off';
+          stateStore.save();
+          await ensureWakeLock();
         }
-        userDisabled = false;
-        await ensureWakeLock();
       });
       document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible' && stateStore.state.running) ensureWakeLock();
+        if (document.visibilityState === 'visible') ensureWakeLock();
       });
-      document.addEventListener('click', () => {
-        if (stateStore.state.running) ensureWakeLock();
-      }, { once: true });
+      // 初回 user gesture で試行 (secure context + gesture 制約対応)
+      document.addEventListener('click', () => ensureWakeLock(), { once: true });
     };
     return { bind, ensureWakeLock, setWakeUI };
   })();
