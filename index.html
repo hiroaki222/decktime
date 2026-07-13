@@ -1,0 +1,990 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-title" content="decktime">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="favicon-32.png" sizes="32x32">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&display=swap" rel="stylesheet">
+<title>decktime</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --color-bg: #000;
+    --color-surface: #101010;
+    --color-text: #fff;
+    --color-text-inverse: #000;
+    --color-text-muted: #888;
+    --color-text-soft: #ddd;
+    --color-text-subtle: #ccc;
+    --color-text-secondary: #aaa;
+    --color-text-body: #d5d5d5;
+    --color-text-dim: #666;
+    --color-idle: #444;
+    --color-border: rgba(255,255,255,0.16);
+    --color-border-muted: rgba(255,255,255,0.14);
+    --color-line: #333;
+    --color-border-strong: rgba(255,255,255,0.22);
+    --color-border-dashed: rgba(255,255,255,0.32);
+    --color-button: rgba(255,255,255,0.10);
+    --color-button-active: rgba(255,255,255,0.20);
+    --color-button-subtle: rgba(255,255,255,0.08);
+    --color-button-pressed: rgba(255,255,255,0.22);
+    --color-button-hover: rgba(255,255,255,0.15);
+    --color-panel: rgba(255,255,255,0.05);
+    --color-modal-backdrop: rgba(0,0,0,0.86);
+    --danger: #ff3b30;
+    --danger-active: #d92d24;
+    --warn: #ffd60a;
+    --prewait: #777;
+    --wake-on: #34c759;
+    --wake-off: #ff6961;
+    --radius-pill: 999px;
+    --radius-modal: 20px;
+    --timing-fast: 0.15s;
+    --blur-panel: 8px;
+    --blur-modal: 6px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    height: 100%; width: 100%;
+    background: var(--color-bg); color: var(--color-text);
+    font-family: "Chakra Petch", -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif;
+    font-feature-settings: "tnum" 1, "lnum" 1;
+    overflow: hidden; overscroll-behavior: none; touch-action: manipulation;
+    user-select: none; -webkit-user-select: none;
+  }
+  #app {
+    height: 100dvh; width: 100dvw;
+    display: grid;
+    grid-template-rows: 0.65fr 3px auto 1fr 1fr;
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom) 0;
+    --pad-x: max(14px, env(safe-area-inset-left));
+  }
+  .cell {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    position: relative; overflow: hidden;
+    padding-left: var(--pad-x);
+    padding-right: var(--pad-x);
+  }
+  #session-info { padding-left: var(--pad-x); padding-right: var(--pad-x); }
+  #elapsed { padding-bottom: 110px; }
+  .label {
+    font-size: clamp(11px, 3.2vw, 16px);
+    letter-spacing: 0.18em;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    margin-bottom: 2vh;
+  }
+  .time {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    font-size: clamp(56px, 18.5vw, 150px);
+    line-height: 1;
+    letter-spacing: 0;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: baseline;
+  }
+  .time > .d, .time > .sep {
+    display: inline-block;
+    text-align: center;
+  }
+  .time > .d { width: 0.66em; }
+  .time > .sep { width: 0.34em; }
+  .time.idle { color: var(--color-idle); }
+  #divider { background: var(--color-text); }
+  #remaining.warn .time { color: var(--warn); }
+  #remaining.over .time { color: var(--danger); }
+  #remaining.prewait .time { color: var(--prewait); }
+  #remaining.blink .time { opacity: 0.3; }
+  #remaining .time { transition: color var(--timing-fast), opacity var(--timing-fast); }
+
+  #session-info {
+    padding: 14px 12px 10px;
+    text-align: center;
+    color: var(--color-text-soft);
+    font-family: inherit;
+    font-weight: 600;
+    font-size: clamp(20px, 6.2vw, 32px);
+    letter-spacing: 0.06em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  #session-info .arrow { color: var(--color-text-dim); margin: 0 0.5em; font-weight: 500; }
+  #session-info:empty::before {
+    content: "NO SESSION";
+    color: var(--color-idle);
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    font-size: clamp(14px, 4vw, 20px);
+  }
+
+  #controls {
+    position: fixed;
+    left: 0; right: 0;
+    bottom: calc(env(safe-area-inset-bottom) + 16px);
+    display: flex; justify-content: stretch; gap: 12px;
+    padding: 0 16px;
+    pointer-events: none;
+    z-index: 10;
+  }
+  #controls button { flex: 1; }
+  button {
+    pointer-events: auto;
+    background: var(--color-button);
+    color: var(--color-text);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-pill);
+    padding: 20px 30px;
+    font-family: inherit;
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    backdrop-filter: blur(var(--blur-panel));
+    -webkit-backdrop-filter: blur(var(--blur-panel));
+    min-width: 132px;
+    min-height: 60px;
+  }
+  button:active { background: var(--color-button-active); }
+  button.primary { background: var(--color-text); color: var(--color-text-inverse); border-color: var(--color-text); }
+  button.primary:active { background: var(--color-text-soft); }
+  button.danger { background: var(--danger); border-color: var(--danger); color: var(--color-text); }
+  button.danger:active { background: var(--danger-active); }
+  button:disabled { opacity: 0.3; }
+
+  /* editor modal */
+  #editor {
+    position: fixed; inset: 0;
+    background: var(--color-bg);
+    display: none;
+    align-items: center; justify-content: space-between;
+    z-index: 100;
+    flex-direction: column;
+    padding: calc(env(safe-area-inset-top) + 32px) 20px calc(env(safe-area-inset-bottom) + 140px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  #editor.on { display: flex; }
+  .set-session-block {
+    width: 100%; max-width: 360px;
+    display: flex; flex-direction: column;
+    gap: 18px; align-items: center;
+    margin-top: auto;
+    margin-bottom: 32px; /* CANCEL/SET とのあいだに余白 */
+  }
+  #editor .actions {
+    position: fixed;
+    left: 0; right: 0;
+    bottom: calc(env(safe-area-inset-bottom) + 16px);
+    padding: 0 16px;
+    display: flex; gap: 12px;
+    z-index: 110;
+    max-width: none;
+    width: 100%;
+  }
+  #editor .actions button { flex: 1; }
+  #editor h2 {
+    font-size: 14px; letter-spacing: 0.22em;
+    color: var(--color-text); text-transform: uppercase; font-weight: 600;
+  }
+  .rows { display: flex; flex-direction: column; gap: 18px; width: 100%; max-width: 360px; }
+  .row-line {
+    display: flex; align-items: baseline; justify-content: space-between;
+    border-bottom: 1px solid var(--color-line);
+    padding: 8px 4px 12px;
+    min-height: 68px;
+  }
+  .row-line .k {
+    font-size: 14px; color: var(--color-text);
+    letter-spacing: 0.18em; text-transform: uppercase;
+    font-weight: 600;
+  }
+  .row-line input[type="time"] {
+    background: transparent;
+    border: none;
+    color: var(--color-text);
+    font: inherit;
+    font-family: inherit;
+    font-variant-numeric: tabular-nums;
+    font-size: clamp(40px, 12vw, 64px);
+    font-weight: 700;
+    line-height: 1.05;
+    padding: 0;
+    outline: none;
+    text-align: right;
+    -webkit-appearance: none;
+    appearance: none;
+    min-width: 0;
+    letter-spacing: -0.01em;
+  }
+  .row-line input[type="time"]::-webkit-date-and-time-value { text-align: right; }
+  .row-line input[type="time"]::-webkit-calendar-picker-indicator { display: none; }
+
+  .helpers { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 360px; }
+  .helpers-label {
+    text-align: center;
+    color: var(--color-text-soft);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .duration-picker {
+    display: flex; align-items: center;
+    width: 100%; gap: 8px;
+    background: var(--color-panel);
+    border: 1px solid var(--color-border-muted);
+    padding: 6px;
+    border-radius: var(--radius-pill);
+  }
+  .duration-picker button {
+    min-width: 64px; min-height: 52px;
+    padding: 8px 14px;
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1;
+    background: var(--color-button-subtle);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+  }
+  .duration-picker button:active { background: var(--color-button-pressed); }
+  .dur-display {
+    flex: 1;
+    text-align: center;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text);
+  }
+  .dur-display .unit { font-size: 16px; color: var(--color-text-secondary); margin-left: 3px; letter-spacing: 0.06em; }
+
+  /* saved presets section (editor の上部) */
+  .saved { width: 100%; max-width: 360px; }
+  .saved-label {
+    text-align: center;
+    color: var(--color-text-soft);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  #saved-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .saved-chip {
+    padding: 12px 12px 12px 20px;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    min-height: 54px;
+    min-width: 0;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: var(--color-button-subtle);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+    font-variant-numeric: tabular-nums;
+  }
+  .saved-chip .x {
+    display: inline-flex;
+    align-items: center; justify-content: center;
+    width: 32px; height: 32px;
+    color: var(--color-text-muted);
+    font-size: 20px;
+    line-height: 1;
+    border-radius: var(--radius-pill);
+    margin-left: 4px;
+  }
+  .saved-chip .x:active { background: var(--color-button-hover); color: var(--color-text); }
+  .saved-empty {
+    color: var(--color-text-dim);
+    font-size: 12px;
+    text-align: center;
+    width: 100%;
+    padding: 8px 0;
+    letter-spacing: 0.05em;
+  }
+  #btn-save {
+    padding: 12px 22px;
+    font-size: 14px;
+    letter-spacing: 0.14em;
+    min-height: 48px;
+    min-width: 0;
+    background: transparent;
+    border: 1px dashed var(--color-border-dashed);
+    color: var(--color-text-subtle);
+    align-self: stretch;
+  }
+  #btn-save .arrow { display: inline-block; margin-right: 6px; font-weight: 700; }
+
+  /* 自前 confirm モーダル */
+  #modal {
+    position: fixed; inset: 0;
+    background: var(--color-modal-backdrop);
+    -webkit-backdrop-filter: blur(var(--blur-modal));
+    backdrop-filter: blur(var(--blur-modal));
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 200;
+    padding: 20px;
+  }
+  #modal.on { display: flex; }
+  .modal-body {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-modal);
+    padding: 28px 22px 20px;
+    max-width: 360px; width: 100%;
+    display: flex; flex-direction: column;
+    gap: 16px;
+  }
+  .modal-body h3 {
+    font-family: inherit;
+    font-size: 15px; font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    text-align: center;
+    color: var(--color-text);
+    margin: 0;
+    /* letter-spacing は最終文字の右にも余白を作るため, 同量を左に足して視覚的に中央揃え */
+    padding-left: 0.2em;
+  }
+  .modal-body p {
+    font-size: 16px; line-height: 1.55;
+    color: var(--color-text-body);
+    text-align: center;
+    margin: 0;
+    font-family: inherit;
+  }
+  .modal-actions {
+    display: flex; gap: 10px; margin-top: 8px;
+  }
+  .modal-actions button {
+    flex: 1;
+    min-height: 56px;
+    font-size: 16px;
+  }
+  .modal-actions .danger {
+    background: var(--danger); border-color: var(--danger); color: var(--color-text);
+  }
+  .modal-actions .danger:active { background: var(--danger-active); }
+
+  /* wake lock toggle (文字だけ, タップターゲットは 44x44 確保) */
+  #wake {
+    position: fixed;
+    top: calc(env(safe-area-inset-top) + 8px);
+    right: 8px;
+    font-size: 11px;
+    font-family: inherit;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    z-index: 15;
+    padding: 12px 14px;
+    min-height: 44px;
+    min-width: 44px;
+    background: transparent;
+    border: none;
+    color: var(--wake-off);
+  }
+  #wake.on { color: var(--wake-on); }
+  #wake:active { opacity: 0.5; }
+</style>
+</head>
+<body>
+  <div id="app">
+    <section class="cell" id="clock">
+      <span class="label">NOW</span>
+      <span class="time" id="clock-time">--:--:--</span>
+    </section>
+    <div id="divider"></div>
+    <div id="session-info" role="button" aria-label="タップでセット時間を編集"></div>
+    <section class="cell" id="remaining">
+      <span class="label">REMAINING</span>
+      <span class="time idle" id="remaining-time">--:--:--</span>
+    </section>
+    <section class="cell" id="elapsed">
+      <span class="label">ELAPSED</span>
+      <span class="time idle" id="elapsed-time">--:--:--</span>
+    </section>
+  </div>
+
+  <button id="wake" type="button" aria-label="スリープ切替">SLEEP: ON</button>
+
+  <div id="modal" role="dialog" aria-modal="true">
+    <div class="modal-body">
+      <h3 id="modal-title"></h3>
+      <p id="modal-message"></p>
+      <div class="modal-actions">
+        <button id="modal-cancel">CANCEL</button>
+        <button id="modal-ok" class="primary">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="controls">
+    <button id="btn-set">SET</button>
+    <button id="btn-toggle" class="primary">START</button>
+  </div>
+
+  <div id="editor" role="dialog" aria-modal="true">
+    <div class="saved">
+      <div class="saved-label">SAVED</div>
+      <div id="saved-list"></div>
+    </div>
+
+    <div class="set-session-block">
+      <button id="btn-save"><span class="arrow">↑</span>SAVE CURRENT</button>
+      <h2>SET SESSION</h2>
+      <div class="rows">
+        <div class="row-line">
+          <span class="k">START</span>
+          <input id="in-start" type="time" step="60" value="22:00">
+        </div>
+        <div class="row-line">
+          <span class="k">END</span>
+          <input id="in-end" type="time" step="60" value="23:00">
+        </div>
+      </div>
+      <div class="helpers">
+        <div class="helpers-label">END = START +</div>
+        <div class="duration-picker">
+          <button id="dur-minus" aria-label="10分減らす">−</button>
+          <div class="dur-display"><span id="dur-value">20</span><span class="unit">m</span></div>
+          <button id="dur-plus" aria-label="10分増やす">＋</button>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="edit-cancel">CANCEL</button>
+        <button id="edit-ok" class="primary">SET</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  'use strict';
+
+  const ids = [
+    'clock-time',
+    'remaining-time',
+    'elapsed-time',
+    'remaining',
+    'session-info',
+    'btn-set',
+    'btn-toggle',
+    'editor',
+    'edit-cancel',
+    'edit-ok',
+    'in-start',
+    'in-end',
+    'dur-minus',
+    'dur-plus',
+    'dur-value',
+    'saved-list',
+    'btn-save',
+    'modal',
+    'modal-title',
+    'modal-message',
+    'modal-ok',
+    'modal-cancel',
+    'wake',
+  ];
+
+  const collectDom = () => Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
+  const dom = collectDom();
+
+  const utils = (() => {
+    const pad = (n, w = 2) => String(Math.abs(n)).padStart(w, '0');
+    const escapeHTML = s => String(s).replace(/[&<>"']/g, ch => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    })[ch]);
+    const fmtClock = d => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    const fmtDur = ms => {
+      const neg = ms < 0;
+      const totalSec = Math.floor(Math.abs(ms) / 1000);
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      const sec = totalSec % 60;
+      const base = `${h}:${pad(m)}:${pad(sec)}`;
+      return neg ? `-${base}` : base;
+    };
+    const wrapDigits = str => {
+      let out = '';
+      for (const ch of str) {
+        out += ch === ':' || ch === '.'
+          ? `<span class="sep">${ch}</span>`
+          : `<span class="d">${ch}</span>`;
+      }
+      return out;
+    };
+    const setTime = (el, str) => {
+      el.innerHTML = wrapDigits(str);
+    };
+    const parseHM = hm => {
+      const [h, m] = hm.split(':').map(Number);
+      return { h: h || 0, m: m || 0 };
+    };
+    const hmToTodayMs = hm => {
+      const { h, m } = parseHM(hm);
+      const d = new Date();
+      d.setHours(h, m, 0, 0);
+      return d.getTime();
+    };
+    const nowRoundedHM = (addMin = 0) => {
+      const d = new Date(Date.now() + addMin * 60_000);
+      return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+    const addMinToHM = (hm, min) => {
+      const { h, m } = parseHM(hm);
+      let total = h * 60 + m + min;
+      total = ((total % 1440) + 1440) % 1440;
+      return `${pad(Math.floor(total / 60))}:${pad(total % 60)}`;
+    };
+    const hmToMinutes = hm => {
+      const { h, m } = parseHM(hm);
+      return h * 60 + m;
+    };
+
+    return {
+      addMinToHM,
+      escapeHTML,
+      fmtClock,
+      fmtDur,
+      hmToMinutes,
+      hmToTodayMs,
+      nowRoundedHM,
+      parseHM,
+      setTime,
+      wrapDigits,
+    };
+  })();
+
+  const stateStore = (() => {
+    const KEY = 'decktime.v2';
+    const PRESETS_KEY = 'decktime.presets.v1';
+    const readJSON = fallback => {
+      try { return JSON.parse(localStorage.getItem(fallback.key)) || fallback.value; }
+      catch { return fallback.value; }
+    };
+    const initial = readJSON({ key: KEY, value: {} });
+    const state = {
+      startHM: initial.startHM || null,
+      endHM: initial.endHM || null,
+      running: !!initial.running,
+    };
+    let presets = readJSON({ key: PRESETS_KEY, value: [] });
+
+    const save = () => localStorage.setItem(KEY, JSON.stringify({
+      startHM: state.startHM,
+      endHM: state.endHM,
+      running: state.running,
+    }));
+    const savePresets = () => localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
+    const hasSession = () => !!(state.startHM && state.endHM);
+    const getRange = () => {
+      if (!hasSession()) return null;
+      const startMs = utils.hmToTodayMs(state.startHM);
+      let endMs = utils.hmToTodayMs(state.endHM);
+      if (endMs <= startMs) endMs += 24 * 3600 * 1000;
+      return { startMs, endMs };
+    };
+    const setSession = (startHM, endHM) => {
+      state.startHM = startHM;
+      state.endHM = endHM;
+      save();
+    };
+    const start = () => {
+      state.running = true;
+      save();
+    };
+    const reset = () => {
+      state.running = false;
+      save();
+    };
+    const isChangingSession = (startHM, endHM) => (
+      state.running && (state.startHM !== startHM || state.endHM !== endHM)
+    );
+    const getPresets = () => presets;
+    const addPreset = (startHM, endHM) => {
+      if (presets.some(p => p.start === startHM && p.end === endHM)) return false;
+      presets = [{ start: startHM, end: endHM }, ...presets].slice(0, 12);
+      savePresets();
+      return true;
+    };
+    const removePreset = idx => {
+      presets.splice(idx, 1);
+      savePresets();
+    };
+    const expireStaleRunningSession = () => {
+      if (!state.running) return;
+      const range = getRange();
+      if (!range || Date.now() > range.endMs + 12 * 3600 * 1000) reset();
+    };
+
+    return {
+      addPreset,
+      expireStaleRunningSession,
+      getPresets,
+      getRange,
+      hasSession,
+      isChangingSession,
+      removePreset,
+      reset,
+      save,
+      setSession,
+      start,
+      state,
+    };
+  })();
+
+  const modal = (() => {
+    let resolveActive = null;
+    const close = result => {
+      dom.modal.classList.remove('on');
+      if (!resolveActive) return;
+      const resolve = resolveActive;
+      resolveActive = null;
+      resolve(result);
+    };
+    const confirmModal = ({
+      title = 'CONFIRM',
+      message = '',
+      okLabel = 'OK',
+      cancelLabel = 'CANCEL',
+      danger = false,
+    } = {}) => {
+      if (resolveActive) close(false);
+      dom['modal-title'].textContent = title;
+      dom['modal-message'].textContent = message;
+      dom['modal-ok'].textContent = okLabel;
+      dom['modal-cancel'].textContent = cancelLabel;
+      dom['modal-ok'].classList.toggle('danger', danger);
+      dom['modal-ok'].classList.toggle('primary', !danger);
+      dom.modal.classList.add('on');
+      return new Promise(resolve => { resolveActive = resolve; });
+    };
+    const bind = () => {
+      dom['modal-ok'].addEventListener('click', () => close(true));
+      dom['modal-cancel'].addEventListener('click', () => close(false));
+      dom.modal.addEventListener('click', e => {
+        if (e.target === dom.modal) close(false);
+      });
+    };
+    return { bind, close, confirmModal };
+  })();
+
+  const renderer = (() => {
+    const renderSessionInfo = hasSession => {
+      if (!hasSession) {
+        dom['session-info'].textContent = '';
+        return;
+      }
+      const { state } = stateStore;
+      dom['session-info'].innerHTML = `${state.startHM}<span class="arrow">→</span>${state.endHM}`;
+    };
+    const renderTimers = now => {
+      const { state } = stateStore;
+      const hasSession = stateStore.hasSession();
+      if (!state.running || !hasSession) {
+        utils.setTime(dom['remaining-time'], '--:--:--');
+        utils.setTime(dom['elapsed-time'], '--:--:--');
+        dom['remaining-time'].classList.add('idle');
+        dom['elapsed-time'].classList.add('idle');
+        dom.remaining.classList.remove('warn', 'over', 'blink', 'prewait');
+        return;
+      }
+
+      const { startMs, endMs } = stateStore.getRange();
+      const t = now.getTime();
+      const rem = endMs - t;
+      const elapsed = t - startMs;
+      utils.setTime(dom['remaining-time'], utils.fmtDur(rem));
+      utils.setTime(dom['elapsed-time'], utils.fmtDur(elapsed));
+      dom['remaining-time'].classList.remove('idle');
+      dom['elapsed-time'].classList.remove('idle');
+
+      const prewait = t < startMs;
+      const shouldBlink = !prewait && rem <= 60_000 && rem > 0;
+      dom.remaining.classList.toggle('prewait', prewait);
+      dom.remaining.classList.toggle('warn', !prewait && rem <= 180_000 && rem > 0);
+      dom.remaining.classList.toggle('over', !prewait && rem <= 0);
+      dom.remaining.classList.toggle('blink', shouldBlink && (Math.floor(t / 500) % 2 === 0));
+    };
+    const renderButtons = hasSession => {
+      const { state } = stateStore;
+      if (state.running) {
+        dom['btn-toggle'].textContent = 'RESET';
+        dom['btn-toggle'].classList.remove('primary');
+        dom['btn-toggle'].classList.add('danger');
+        dom['btn-toggle'].disabled = false;
+        return;
+      }
+      dom['btn-toggle'].textContent = 'START';
+      dom['btn-toggle'].classList.add('primary');
+      dom['btn-toggle'].classList.remove('danger');
+      dom['btn-toggle'].disabled = !hasSession;
+    };
+    const render = () => {
+      const now = new Date();
+      const hasSession = stateStore.hasSession();
+      utils.setTime(dom['clock-time'], utils.fmtClock(now));
+      renderSessionInfo(hasSession);
+      renderTimers(now);
+      renderButtons(hasSession);
+    };
+    const loop = () => {
+      render();
+      requestAnimationFrame(loop);
+    };
+    return { loop, render };
+  })();
+
+  const wake = (() => {
+    let wakeLock = null;
+    let userDisabled = false;
+    const setWakeUI = on => {
+      dom.wake.textContent = `SLEEP: ${on ? 'OFF' : 'ON'}`;
+      dom.wake.classList.toggle('on', on);
+    };
+    const ensureWakeLock = async () => {
+      if (!('wakeLock' in navigator) || wakeLock || userDisabled) return;
+      try {
+        wakeLock = await navigator.wakeLock.request('screen');
+        setWakeUI(true);
+        wakeLock.addEventListener('release', () => {
+          wakeLock = null;
+          setWakeUI(false);
+        });
+      } catch {
+        // Wake Lock can fail on insecure origins or without a user gesture.
+      }
+    };
+    const bind = () => {
+      dom.wake.addEventListener('click', async () => {
+        if (wakeLock) {
+          userDisabled = true;
+          try { await wakeLock.release(); } catch {}
+          wakeLock = null;
+          setWakeUI(false);
+          return;
+        }
+        userDisabled = false;
+        await ensureWakeLock();
+      });
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && stateStore.state.running) ensureWakeLock();
+      });
+      document.addEventListener('click', () => {
+        if (stateStore.state.running) ensureWakeLock();
+      }, { once: true });
+    };
+    return { bind, ensureWakeLock, setWakeUI };
+  })();
+
+  const editor = (() => {
+    let displayedDur = 20;
+    const refreshDurDisplay = () => {
+      dom['dur-value'].textContent = displayedDur;
+    };
+    const applyDur = min => {
+      const nextMin = Math.max(10, Math.min(600, min));
+      const startHM = dom['in-start'].value || utils.nowRoundedHM();
+      dom['in-start'].value = startHM;
+      dom['in-end'].value = utils.addMinToHM(startHM, nextMin);
+      displayedDur = nextMin;
+      refreshDurDisplay();
+    };
+    const closeEditor = () => {
+      dom.editor.classList.remove('on');
+    };
+    const openEditor = () => {
+      const now = utils.nowRoundedHM(0);
+      dom['in-start'].value = now;
+      dom['in-end'].value = utils.addMinToHM(now, 20);
+      displayedDur = 20;
+      refreshDurDisplay();
+      renderPresets();
+      dom.editor.classList.add('on');
+    };
+    const confirmOverwriteIfNeeded = async (startHM, endHM) => {
+      if (!stateStore.isChangingSession(startHM, endHM)) return true;
+      return modal.confirmModal({
+        title: 'OVERWRITE SESSION',
+        message: '稼働中のセットを上書きする?',
+        okLabel: 'OVERWRITE',
+        danger: true,
+      });
+    };
+    const setSessionFromEditor = async () => {
+      const startHM = dom['in-start'].value;
+      const endHM = dom['in-end'].value;
+      if (!startHM || !endHM) return;
+      if (!await confirmOverwriteIfNeeded(startHM, endHM)) return;
+      stateStore.setSession(startHM, endHM);
+      closeEditor();
+      renderer.render();
+    };
+    const renderPresets = () => {
+      const presets = stateStore.getPresets();
+      if (!presets.length) {
+        dom['saved-list'].innerHTML = '<span class="saved-empty">No data</span>';
+        return;
+      }
+      const sorted = presets
+        .map((preset, originalIdx) => ({ ...preset, originalIdx }))
+        .sort((a, b) => {
+          const diff = utils.hmToMinutes(a.start) - utils.hmToMinutes(b.start);
+          return diff !== 0 ? diff : utils.hmToMinutes(a.end) - utils.hmToMinutes(b.end);
+        });
+      dom['saved-list'].innerHTML = sorted.map(preset => `
+        <button class="saved-chip" data-idx="${preset.originalIdx}">
+          <span class="hm">${utils.escapeHTML(preset.start)}–${utils.escapeHTML(preset.end)}</span>
+          <span class="x" data-del="${preset.originalIdx}" aria-label="削除">×</span>
+        </button>
+      `).join('');
+    };
+    const deletePreset = async idx => {
+      const preset = stateStore.getPresets()[idx];
+      if (!preset) return;
+      const ok = await modal.confirmModal({
+        title: 'DELETE PRESET',
+        message: `「${preset.start}–${preset.end}」を削除する?`,
+        okLabel: 'DELETE',
+        danger: true,
+      });
+      if (!ok) return;
+      stateStore.removePreset(idx);
+      renderPresets();
+    };
+    const choosePreset = async idx => {
+      const preset = stateStore.getPresets()[idx];
+      if (!preset) return;
+      if (!await confirmOverwriteIfNeeded(preset.start, preset.end)) return;
+      stateStore.setSession(preset.start, preset.end);
+      closeEditor();
+      renderer.render();
+    };
+    const saveCurrentPreset = () => {
+      const startHM = dom['in-start'].value;
+      const endHM = dom['in-end'].value;
+      if (!startHM || !endHM) return;
+      if (stateStore.addPreset(startHM, endHM)) renderPresets();
+    };
+    const bind = () => {
+      dom['btn-set'].addEventListener('click', openEditor);
+      dom['edit-cancel'].addEventListener('click', closeEditor);
+      dom['edit-ok'].addEventListener('click', setSessionFromEditor);
+      dom['dur-minus'].addEventListener('click', () => applyDur(displayedDur - 10));
+      dom['dur-plus'].addEventListener('click', () => applyDur(displayedDur + 10));
+      dom['btn-save'].addEventListener('click', saveCurrentPreset);
+      dom['saved-list'].addEventListener('click', async e => {
+        const delEl = e.target.closest('[data-del]');
+        if (delEl) {
+          e.stopPropagation();
+          await deletePreset(Number.parseInt(delEl.dataset.del, 10));
+          return;
+        }
+        const chip = e.target.closest('.saved-chip');
+        if (chip) await choosePreset(Number.parseInt(chip.dataset.idx, 10));
+      });
+    };
+    return { applyDur, bind, closeEditor, openEditor, renderPresets };
+  })();
+
+  const sessionControls = (() => {
+    let hitZero = false;
+    const start = () => {
+      if (!stateStore.hasSession()) {
+        editor.openEditor();
+        return;
+      }
+      stateStore.start();
+      wake.ensureWakeLock();
+    };
+    const reset = () => {
+      stateStore.reset();
+      hitZero = false;
+    };
+    const bind = () => {
+      dom['btn-toggle'].addEventListener('click', async () => {
+        if (!stateStore.state.running) {
+          start();
+          return;
+        }
+        const ok = await modal.confirmModal({
+          title: 'RESET SESSION',
+          message: '稼働中のセットをリセットする?',
+          okLabel: 'RESET',
+          danger: true,
+        });
+        if (ok) reset();
+      });
+    };
+    const watchZeroCrossing = () => {
+      setInterval(() => {
+        if (!stateStore.state.running) {
+          hitZero = false;
+          return;
+        }
+        const range = stateStore.getRange();
+        if (!range) return;
+        const rem = range.endMs - Date.now();
+        if (rem <= 0 && !hitZero) {
+          hitZero = true;
+          if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400]);
+        }
+        if (rem > 0) hitZero = false;
+      }, 250);
+    };
+    return { bind, reset, start, watchZeroCrossing };
+  })();
+
+  const init = () => {
+    stateStore.expireStaleRunningSession();
+    modal.bind();
+    wake.bind();
+    editor.bind();
+    sessionControls.bind();
+    sessionControls.watchZeroCrossing();
+    editor.renderPresets();
+    if (stateStore.state.running) wake.ensureWakeLock();
+    renderer.loop();
+  };
+
+  window.decktime = {
+    editor,
+    modal,
+    renderer,
+    sessionControls,
+    stateStore,
+    utils,
+    wake,
+  };
+
+  init();
+})();
+</script>
+</body>
+</html>
