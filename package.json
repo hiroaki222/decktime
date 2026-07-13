@@ -1,0 +1,5 @@
+{
+  "scripts": {
+    "lint": "bun tools/lint-index.mjs"
+  }
+}
