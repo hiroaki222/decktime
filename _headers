@@ -1,7 +1,6 @@
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
-  Permissions-Policy: interest-cohort=()
 
 /index.html
   Cache-Control: public, max-age=0, must-revalidate
