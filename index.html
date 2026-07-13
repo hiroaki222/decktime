@@ -769,28 +769,29 @@
 
   const wake = (() => {
     let wakeLock = null;
-    const setWakeUI = on => {
-      dom.wake.textContent = `SLEEP: ${on ? 'OFF' : 'ON'}`;
-      dom.wake.classList.toggle('on', on);
-    };
-    // 意図的に wake lock を維持すべきか (running 中 or ユーザーが明示的に off 選択)
+    // 表示はユーザーの意思 (wakePref + running) を反映する.
+    // iOS Safari は wakeLock.request を user gesture 内でしか許さないため,
+    // リロード直後に silent fail しても表示だけは意思ベースで維持する.
     const shouldHoldLock = () => {
       const { wakePref, running } = stateStore.state;
-      if (wakePref === 'on') return false;      // ユーザーが SLEEP:ON を明示
-      if (wakePref === 'off') return true;       // ユーザーが SLEEP:OFF を明示
-      return running;                            // 'auto': running 中のみ
+      if (wakePref === 'on') return false;    // ユーザーが SLEEP:ON を明示
+      if (wakePref === 'off') return true;    // ユーザーが SLEEP:OFF を明示
+      return running;                         // 'auto': running 中のみ
+    };
+    const updateUI = () => {
+      const wantOff = shouldHoldLock();
+      dom.wake.textContent = `SLEEP: ${wantOff ? 'OFF' : 'ON'}`;
+      dom.wake.classList.toggle('on', wantOff);
     };
     const ensureWakeLock = async () => {
       if (!('wakeLock' in navigator) || wakeLock) return;
       if (!shouldHoldLock()) return;
       try {
         wakeLock = await navigator.wakeLock.request('screen');
-        setWakeUI(true);
         wakeLock.addEventListener('release', () => {
           wakeLock = null;
-          setWakeUI(false);
-          // ページが visible に戻った時に再取得を試みる (visibilitychange 側で拾う).
-          // OS がタブ切り替え等で強制 release した場合を想定.
+          // 表示は wakePref ベースなので触らない.
+          // visibilitychange / 次のユーザー gesture で再取得を試みる.
         });
       } catch {
         // Wake Lock can fail on insecure origins or without a user gesture.
@@ -800,29 +801,30 @@
       if (!wakeLock) return;
       try { await wakeLock.release(); } catch {}
       wakeLock = null;
-      setWakeUI(false);
     };
     const bind = () => {
       dom.wake.addEventListener('click', async () => {
-        if (wakeLock) {
-          // 現在保持中 → ユーザーが SLEEP:ON にしたい
+        if (stateStore.state.wakePref === 'off' || (stateStore.state.wakePref === 'auto' && wakeLock)) {
+          // 現在 SLEEP:OFF を出してる → SLEEP:ON に切替
           stateStore.state.wakePref = 'on';
           stateStore.save();
+          updateUI();
           await releaseWakeLock();
         } else {
-          // 未保持 → ユーザーが SLEEP:OFF にしたい
+          // 現在 SLEEP:ON を出してる → SLEEP:OFF に切替
           stateStore.state.wakePref = 'off';
           stateStore.save();
+          updateUI();
           await ensureWakeLock();
         }
       });
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') ensureWakeLock();
       });
-      // 初回 user gesture で試行 (secure context + gesture 制約対応)
       document.addEventListener('click', () => ensureWakeLock(), { once: true });
+      updateUI();
     };
-    return { bind, ensureWakeLock, setWakeUI };
+    return { bind, ensureWakeLock, updateUI };
   })();
 
   const editor = (() => {
@@ -943,11 +945,13 @@
         return;
       }
       stateStore.start();
+      wake.updateUI();
       wake.ensureWakeLock();
     };
     const reset = () => {
       stateStore.reset();
       hitZero = false;
+      wake.updateUI();
     };
     const bind = () => {
       dom['btn-toggle'].addEventListener('click', async () => {
