@@ -1004,6 +1004,8 @@
     };
     const bind = () => {
       dom['btn-set'].addEventListener('click', openEditor);
+      // aria-label「タップでセット時間を編集」の約束どおり, セット表示のタップでも開く
+      dom['session-info'].addEventListener('click', openEditor);
       dom['edit-cancel'].addEventListener('click', closeEditor);
       dom['edit-ok'].addEventListener('click', setSessionFromEditor);
       dom['dur-minus'].addEventListener('click', () => applyDur(displayedDur - 10));
