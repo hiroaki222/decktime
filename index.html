@@ -122,6 +122,15 @@
     white-space: nowrap;
   }
   #session-info .arrow { color: var(--color-text-dim); margin: 0 0.5em; font-weight: 500; }
+  /* 翌日に繰り上がったセットの印. 通常時は出ない */
+  #session-info .next-day {
+    color: var(--color-text-dim);
+    font-size: 0.5em;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    margin-left: 0.6em;
+    vertical-align: 0.15em;
+  }
   #session-info:empty::before {
     content: "NO SESSION";
     color: var(--color-idle);
@@ -736,7 +745,16 @@
         return;
       }
       const { state } = stateStore;
-      dom['session-info'].innerHTML = `${state.startHM}<span class="arrow">→</span>${state.endHM}`;
+      // 過去セットの START で翌日以降に繰り上がった場合, 表示時刻だけでは
+      // 「今日のセット」と区別がつかないため +1d を添える.
+      let nextDay = '';
+      if (state.running && typeof state.runStartMs === 'number') {
+        const start = new Date(state.runStartMs);
+        if (state.runStartMs > Date.now() && start.toDateString() !== new Date().toDateString()) {
+          nextDay = '<span class="next-day">+1d</span>';
+        }
+      }
+      dom['session-info'].innerHTML = `${state.startHM}<span class="arrow">→</span>${state.endHM}${nextDay}`;
     };
     const renderTimers = now => {
       const { state } = stateStore;
@@ -753,7 +771,8 @@
       const { startMs, endMs } = stateStore.getRange();
       const t = now.getTime();
       const rem = endMs - t;
-      const elapsed = t - startMs;
+      // 開始前はまだ何も経過していない. 負の経過時間は意味を持たないので 0 に留める.
+      const elapsed = Math.max(0, t - startMs);
       utils.setTime(dom['remaining-time'], utils.fmtDur(rem));
       utils.setTime(dom['elapsed-time'], utils.fmtDur(elapsed));
       dom['remaining-time'].classList.remove('idle');
