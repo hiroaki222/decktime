@@ -593,6 +593,10 @@
       startHM: initial.startHM || null,
       endHM: initial.endHM || null,
       running: !!initial.running,
+      // START 時点で決定する絶対 ms. HH:MM は表示用のまま維持し,
+      // 実際のカウントはこの絶対時刻を基準にする.
+      // 既に完了した過去のセッションを START した場合は "次の" 発生に繰り上げる.
+      runStartMs: typeof initial.runStartMs === 'number' ? initial.runStartMs : null,
       // wakePref: 'auto' | 'off' | 'on'
       //   'auto' = 初期状態. running 時のみ自動取得
       //   'off'  = ユーザーが SLEEP:OFF を明示. 常に取得しようとする (visible 時)
@@ -605,12 +609,33 @@
       startHM: state.startHM,
       endHM: state.endHM,
       running: state.running,
+      runStartMs: state.runStartMs,
       wakePref: state.wakePref,
     }));
     const savePresets = () => localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
     const hasSession = () => !!(state.startHM && state.endHM);
+    const sessionDurationMs = () => {
+      const startMin = utils.hmToMinutes(state.startHM);
+      const endMin = utils.hmToMinutes(state.endHM);
+      let durMin = endMin - startMin;
+      if (durMin <= 0) durMin += 1440;
+      return durMin * 60_000;
+    };
+    // START (or 稼働中の setSession) 時に呼ぶ. セッション全体が既に完全に過去なら
+    // 翌日以降に繰り上げ, START 直後に OVER 状態にならないことを保証する.
+    const computeRunStartMs = () => {
+      if (!hasSession()) return null;
+      const now = Date.now();
+      let startMs = utils.hmToTodayMs(state.startHM);
+      const durMs = sessionDurationMs();
+      while (startMs + durMs <= now) startMs += 24 * 3600 * 1000;
+      return startMs;
+    };
     const getRange = () => {
       if (!hasSession()) return null;
+      if (state.running && typeof state.runStartMs === 'number') {
+        return { startMs: state.runStartMs, endMs: state.runStartMs + sessionDurationMs() };
+      }
       const startMs = utils.hmToTodayMs(state.startHM);
       let endMs = utils.hmToTodayMs(state.endHM);
       if (endMs <= startMs) endMs += 24 * 3600 * 1000;
@@ -619,14 +644,17 @@
     const setSession = (startHM, endHM) => {
       state.startHM = startHM;
       state.endHM = endHM;
+      if (state.running) state.runStartMs = computeRunStartMs();
       save();
     };
     const start = () => {
       state.running = true;
+      state.runStartMs = computeRunStartMs();
       save();
     };
     const reset = () => {
       state.running = false;
+      state.runStartMs = null;
       save();
     };
     const isChangingSession = (startHM, endHM) => (
