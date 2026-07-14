@@ -128,6 +128,10 @@
   #remaining.prewait .time { color: var(--prewait); }
   #remaining.blink .time { opacity: 0.3; }
   #remaining .time { transition: color var(--timing-fast), opacity var(--timing-fast); }
+  /* OS の視覚効果削減設定では点滅させない (warn 色は残るので緊急度は伝わる) */
+  @media (prefers-reduced-motion: reduce) {
+    #remaining.blink .time { opacity: 1; }
+  }
 
   #session-info {
     padding: 14px 12px 10px;
