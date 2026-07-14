@@ -295,32 +295,51 @@
     flex-direction: column;
     gap: 8px;
   }
+  /* 読込と削除は別操作なので実 button を2つ持つ (削除だけタップしたいのに読込が発火する誤爆を防ぐ) */
   .saved-chip {
-    padding: 12px 12px 12px 20px;
-    font-size: 17px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
+    padding: 5px 5px 5px 0;
     min-height: 54px;
     min-width: 0;
     width: 100%;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: 4px;
     background: var(--color-button-subtle);
     border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
     color: var(--color-text);
+  }
+  .saved-chip .hm {
+    flex: 1;
+    min-width: 0;
+    min-height: 44px;
+    padding: 0 0 0 20px;
+    background: transparent;
+    border: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    text-align: left;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
     font-variant-numeric: tabular-nums;
+    color: inherit;
   }
   .saved-chip .x {
     display: inline-flex;
     align-items: center; justify-content: center;
-    width: 32px; height: 32px;
+    width: 44px; height: 44px;
+    min-width: 44px; min-height: 44px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     color: var(--color-text-muted);
     font-size: 20px;
     line-height: 1;
     border-radius: var(--radius-pill);
-    margin-left: 4px;
   }
   .saved-chip .x:active { background: var(--color-button-hover); color: var(--color-text); }
   .saved-empty {
@@ -930,10 +949,10 @@
           return diff !== 0 ? diff : utils.hmToMinutes(a.end) - utils.hmToMinutes(b.end);
         });
       dom['saved-list'].innerHTML = sorted.map(preset => `
-        <button class="saved-chip" data-idx="${preset.originalIdx}">
-          <span class="hm">${utils.escapeHTML(preset.start)}–${utils.escapeHTML(preset.end)}</span>
-          <span class="x" data-del="${preset.originalIdx}" aria-label="削除">×</span>
-        </button>
+        <div class="saved-chip">
+          <button class="hm" data-idx="${preset.originalIdx}">${utils.escapeHTML(preset.start)}–${utils.escapeHTML(preset.end)}</button>
+          <button class="x" data-del="${preset.originalIdx}" aria-label="プリセット ${utils.escapeHTML(preset.start)}–${utils.escapeHTML(preset.end)} を削除">×</button>
+        </div>
       `).join('');
     };
     const deletePreset = async idx => {
@@ -977,7 +996,7 @@
           await deletePreset(Number.parseInt(delEl.dataset.del, 10));
           return;
         }
-        const chip = e.target.closest('.saved-chip');
+        const chip = e.target.closest('[data-idx]');
         if (chip) await choosePreset(Number.parseInt(chip.dataset.idx, 10));
       });
     };
